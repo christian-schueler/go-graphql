@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	gql "graphql"
+	gql "github.com/christian-schueler/go-graphql/graphql"
 )
 
 func main() {
