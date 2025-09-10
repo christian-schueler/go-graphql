@@ -1,6 +1,7 @@
 package my_graphql
 
 import (
+	"fmt"
 	"log"
 
 	gq "github.com/graphql-go/graphql"
@@ -75,28 +76,109 @@ func GetExampleData() []Location {
 }
 
 func GetSchema(dataPool []Location) gq.Schema {
-	var queryById = gq.NewObject(
+	var LocationGqlType = gq.NewObject(
+		gq.ObjectConfig{
+			Name: "Location",
+			Fields: gq.Fields{
+				"id": &gq.Field{
+					Type: gq.String,
+				},
+				"name": &gq.Field{
+					Type: gq.String,
+				},
+				"parent": &gq.Field{
+					Type: gq.String,
+				},
+			},
+		},
+	)
+
+	var queries = gq.NewObject(
 		gq.ObjectConfig{
 			Name: "Query",
 			Fields: gq.Fields{
 				/* Get (read) a single location by Id
-				   https://localhost/location?query={location(id:"xxxx"){id,name,parent}}
+				   https://localhost:8080/location?query={location(id:"xxxx"){id,name,parent}}
 				*/
 				"location": &gq.Field{
-					Type:        LocationType,
+					Type:        LocationGqlType,
 					Description: "Get a location by Id (GUID)",
 					Args: gq.FieldConfigArgument{
-						Type: gq.String,
+						"id": &gq.ArgumentConfig{
+							Type: gq.String,
+						},
+					},
+					Resolve: func(rp gq.ResolveParams) (interface{}, error) {
+						var id string = rp.Args["id"].(string)
+						if id != "" {
+							for _, location := range dataPool {
+								if location.Id == id {
+									return location, nil
+								}
+							}
+						}
+
+						return nil, nil
+					},
+				},
+				/* Get (read) a single location by Name
+				   https://localhost:8080/location?query={locationByName(name:"xxxx"){id,name,parent}}
+				*/
+				"locationByName": &gq.Field{
+					Type:        LocationGqlType,
+					Description: "Get a location by name",
+					Args: gq.FieldConfigArgument{
+						"name": &gq.ArgumentConfig{
+							Type: gq.String,
+						},
+					},
+					Resolve: func(rp gq.ResolveParams) (interface{}, error) {
+						var name string = rp.Args["name"].(string)
+						if name != "" {
+							for _, location := range dataPool {
+								if location.Name == name {
+									return location, nil
+								}
+							}
+						}
+
+						return nil, nil
+					},
+				},
+				/* Get (read) location list
+				   https://localhost:8080/location?query={locations{id,name,parent}}
+				*/
+				"locations": &gq.Field{
+					Type:        gq.NewList(LocationGqlType),
+					Description: "Get the location list",
+					Resolve: func(rp gq.ResolveParams) (interface{}, error) {
+						return dataPool, nil
 					},
 				},
 			},
 		},
 	)
-	schemaConfig := gq.SchemaConfig{Query: gq.NewObject(rootQuery)}
+	schemaConfig := gq.SchemaConfig{
+		Query: queries,
+	}
 	schema, err := gq.NewSchema(schemaConfig)
 	if err != nil {
 		log.Fatalf("failed to create new schema, error: %v", err)
 	}
 
 	return schema
+}
+
+func ExecuteQuery(query string, dataPool []Location) *gq.Result {
+	var schema gq.Schema = GetSchema(dataPool)
+	result := gq.Do(gq.Params{
+		Schema:        schema,
+		RequestString: query,
+	})
+
+	if len(result.Errors) > 0 {
+		fmt.Printf("errors occurred: %v", result.Errors)
+	}
+
+	return result
 }
